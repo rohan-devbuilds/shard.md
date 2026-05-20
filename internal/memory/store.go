@@ -37,8 +37,12 @@ func NewStore(root string) *Store {
 	return &Store{root: root}
 }
 
+func (s *Store) Dir() string {
+	return filepath.Join(s.root, ".shard")
+}
+
 func (s *Store) Init() error {
-	dir := filepath.Join(s.root, ".shard")
+	dir := s.Dir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -56,6 +60,29 @@ func (s *Store) Init() error {
 	return nil
 }
 
+func (s *Store) Validate() error {
+	info, err := os.Stat(s.Dir())
+	if os.IsNotExist(err) {
+		return fmt.Errorf("Memory folder not found. Run `shard init` first.")
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("memory path is not a directory: %s", s.Dir())
+	}
+	for _, category := range Categories {
+		path := filepath.Join(s.Dir(), category+".md")
+		if _, err := os.Stat(path); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("memory file missing: %s", filepath.Base(path))
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) LoadFiles(names []string) ([]Item, error) {
 	items := make([]Item, 0, len(names))
 	seen := map[string]bool{}
@@ -65,7 +92,7 @@ func (s *Store) LoadFiles(names []string) ([]Item, error) {
 			continue
 		}
 		seen[name] = true
-		path := filepath.Join(s.root, ".shard", name+".md")
+		path := filepath.Join(s.Dir(), name+".md")
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", path, err)
@@ -76,14 +103,64 @@ func (s *Store) LoadFiles(names []string) ([]Item, error) {
 }
 
 func (s *Store) AppendSection(category string, content string) error {
+	_, err := s.AppendSections(map[string]string{category: content})
+	return err
+}
+
+func (s *Store) AppendSections(sections map[string]string) ([]string, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	updated := []string{}
+	for _, category := range Categories {
+		content := sections[category]
+		changed, err := s.appendKnownSection(category, content)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			updated = append(updated, category+".md")
+		}
+	}
+	return updated, nil
+}
+
+func (s *Store) appendKnownSection(category string, content string) (bool, error) {
 	category = strings.ToLower(strings.TrimSpace(category))
 	content = strings.TrimSpace(content)
-	if content == "" || content == "..." || !IsCategory(category) {
-		return nil
+	if !IsCategory(category) || !isDurableContent(content) {
+		return false, nil
 	}
-	path := filepath.Join(s.root, ".shard", category+".md")
-	entry := fmt.Sprintf("\n\n## %s\n\n%s\n", time.Now().Format(time.RFC3339), content)
-	return os.WriteFile(path, appendFile(path, entry), 0644)
+	path := filepath.Join(s.Dir(), category+".md")
+	now := time.Now().Format(time.RFC3339Nano)
+	entry := fmt.Sprintf("\n\n## %s\n\n%s\n", now, content)
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	updated := updateFrontmatterTimestamp(string(existing), now)
+	updated += entry
+	return true, os.WriteFile(path, []byte(updated), 0644)
+}
+
+func isDurableContent(content string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(content))
+	if normalized == "" || normalized == "..." || normalized == "none" || normalized == "n/a" {
+		return false
+	}
+	noDurablePhrases := []string{
+		"no durable",
+		"no relevant",
+		"nothing durable",
+		"not applicable",
+		"no updates",
+	}
+	for _, phrase := range noDurablePhrases {
+		if strings.Contains(normalized, phrase) {
+			return false
+		}
+	}
+	return true
 }
 
 func FormatForPrompt(items []Item) string {
@@ -108,13 +185,32 @@ func IsCategory(name string) bool {
 }
 
 func frontmatter(category string) string {
-	return fmt.Sprintf("---\ncategory: %s\nupdated: %s\npriority: medium\nrelated: []\n---\n", category, time.Now().Format(time.RFC3339))
+	return fmt.Sprintf("---\ncategory: %s\nupdated: %s\npriority: medium\nrelated: []\n---\n", category, time.Now().Format(time.RFC3339Nano))
 }
 
-func appendFile(path string, entry string) []byte {
-	existing, err := os.ReadFile(path)
-	if err != nil {
-		return []byte(entry)
+func updateFrontmatterTimestamp(content string, timestamp string) string {
+	lines := strings.SplitAfter(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return content
 	}
-	return append(existing, []byte(entry)...)
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return content
+	}
+	for i := 1; i < end; i++ {
+		if strings.HasPrefix(lines[i], "updated:") {
+			lines[i] = "updated: " + timestamp + "\n"
+			return strings.Join(lines, "")
+		}
+	}
+	withUpdated := append([]string{}, lines[:end]...)
+	withUpdated = append(withUpdated, "updated: "+timestamp+"\n")
+	withUpdated = append(withUpdated, lines[end:]...)
+	return strings.Join(withUpdated, "")
 }

@@ -50,11 +50,13 @@ go run . init
 go run . chat
 ```
 
-Shard uses Cobra for CLI commands and currently supports Anthropic as the first provider.
+Shard uses Cobra for CLI commands and supports Anthropic and OpenRouter.
 
 ## Setup
 
-Set `ANTHROPIC_API_KEY` before using `shard chat` or `shard optimize`.
+Set a provider API key before using `shard chat` or `shard optimize`. Shard reads keys from your shell environment first, then falls back to a local `.env` file.
+
+Use Anthropic directly:
 
 macOS/Linux:
 
@@ -68,10 +70,31 @@ Windows PowerShell:
 $env:ANTHROPIC_API_KEY="your-api-key"
 ```
 
-Choose a model with `--model`:
+Local `.env`:
+
+```text
+ANTHROPIC_API_KEY=your-api-key
+```
+
+Use OpenRouter:
 
 ```bash
-shard --model claude-3-5-sonnet-20241022 chat
+shard --provider openrouter --model anthropic/claude-3.5-sonnet chat
+```
+
+OpenRouter `.env`:
+
+```text
+SHARD_PROVIDER=openrouter
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+```
+
+When you start `shard chat` without a provider flag or `SHARD_PROVIDER`, Shard asks which provider to use. Choose provider and model with flags to skip the prompt:
+
+```bash
+shard --provider anthropic --model claude-3-5-sonnet-20241022 chat
+shard --provider openrouter --model openai/gpt-4o-mini chat
 ```
 
 ## Commands
@@ -139,7 +162,72 @@ Inside `shard chat`:
 - `/stats` shows session messages, optimize count, token estimates, effort, and focus.
 - `/effort low|medium|high|max` changes the displayed effort level, retrieval budget, and optimizer wording.
 - `/focus <category>` always includes a category such as `bugs`, `api`, `ui`, or `architecture`.
+- `/permissions` shows file and command permissions for the current session.
+- `/run <command>` asks for approval, runs a shell command, and adds the output to the next model context.
+- `/read <file>` asks for approval, reads a file, and adds the contents to the next model context.
+- `/read-all` asks for approval, reads indexed project files, and adds the contents to the next model context.
 - `/exit` quits the chat session.
+
+## File And Command Access
+
+Shard can inspect files and run commands only after you approve the action. Approvals are kept in memory for the current session only and are not persisted.
+
+Example prompt:
+
+```text
+Shard wants to:
+read_file: src/main.go
+
+Allow?
+[y] yes  [n] no  [a] always for this session
+>
+```
+
+Supported permissioned actions:
+
+- `read_file`
+- `write_file`
+- `list_dir`
+- `run_command`
+
+Shard also recognizes a few simple natural language tool requests:
+
+- `run tests` runs `go test ./...` after approval.
+- `build` runs `go build .` after approval.
+- `list files` can be handled from the safe project file tree; directory listings do not read file contents.
+- `read <file>` and `show <file>` read a file after approval.
+- `/read-all` reads indexed project files after approval, skipping large and binary files.
+
+Command output and file contents are labeled as tool results and included in the next model context:
+
+```text
+Tool result:
+command: go test ./...
+stdout:
+...
+stderr:
+...
+```
+
+Long outputs are truncated before display and model injection. Potentially dangerous commands such as `rm -rf`, `del /s`, `format`, `shutdown`, `reboot`, `diskpart`, `sudo`, and destructive PowerShell commands require typing `RUN` before the normal permission approval.
+
+## UI Settings
+
+Shard uses a minimal Shard-branded terminal UI. If `.shard/settings.json` exists, these UI settings are read at chat startup:
+
+```json
+{
+  "ui": {
+    "theme": "default",
+    "thinking": "minimal",
+    "showBudget": false,
+    "typingEffect": true,
+    "typingDelayMs": 10
+  }
+}
+```
+
+Supported themes are `default`, `minimal`, and `dark`. Thinking can be `off`, `minimal`, or `full`. The typing effect streams assistant responses chunk-by-chunk; set `typingEffect` to `false` to print responses immediately.
 
 ## How It Works
 

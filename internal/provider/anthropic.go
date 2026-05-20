@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -54,10 +53,14 @@ func (p *AnthropicProvider) Name() string {
 	return p.model
 }
 
+func (p *AnthropicProvider) Provider() string {
+	return "anthropic"
+}
+
 func (p *AnthropicProvider) Chat(ctx context.Context, messages []Message) (string, error) {
-	key := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
+	key := anthropicAPIKey()
 	if key == "" {
-		return "", errors.New("ANTHROPIC_API_KEY is not set; set it in your environment before using shard chat or shard optimize")
+		return "", errors.New("ANTHROPIC_API_KEY is not set; export it in your environment or add ANTHROPIC_API_KEY=your-key to a local .env file")
 	}
 
 	reqBody := anthropicRequest{
@@ -122,4 +125,8 @@ func (p *AnthropicProvider) Chat(ctx context.Context, messages []Message) (strin
 		}
 	}
 	return "", errors.New("anthropic returned no text content")
+}
+
+func anthropicAPIKey() string {
+	return envValue("ANTHROPIC_API_KEY")
 }

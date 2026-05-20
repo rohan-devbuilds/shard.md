@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	modelName string
-	rootCmd   = &cobra.Command{
+	modelName    string
+	providerName string
+	rootCmd      = &cobra.Command{
 		Use:   "shard",
 		Short: "Compress AI coding conversations into Markdown project memory",
 		Long:  "Shard is a CLI that keeps durable AI coding context in categorized Markdown files.",
@@ -24,5 +25,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&modelName, "model", "claude-3-5-sonnet-20241022", "Anthropic model to use")
+	rootCmd.PersistentFlags().StringVar(&providerName, "provider", "", "AI provider to use: anthropic or openrouter")
+	rootCmd.PersistentFlags().StringVar(&modelName, "model", "", "Model to use")
 }

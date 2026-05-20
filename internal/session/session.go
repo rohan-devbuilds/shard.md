@@ -13,15 +13,19 @@ type Message struct {
 }
 
 type Session struct {
-	Messages             []Message
-	Effort               string
-	Focus                string
-	OptimizeCount        int
-	CurrentContextTokens int
-	SessionTokens        int
-	BeforeOptimizeTokens int
-	AfterOptimizeTokens  int
-	pairsSinceOptimize   int
+	Messages              []Message
+	Effort                string
+	Focus                 string
+	OptimizeCount         int
+	CurrentContextTokens  int
+	SessionTokens         int
+	EstimatedInputTokens  int
+	EstimatedOutputTokens int
+	LastInputTokens       int
+	LastOutputTokens      int
+	BeforeOptimizeTokens  int
+	AfterOptimizeTokens   int
+	pairsSinceOptimize    int
 }
 
 func New() *Session {
@@ -42,6 +46,17 @@ func (s *Session) Add(role string, content string) {
 
 func (s *Session) PendingPairs() int {
 	return s.pairsSinceOptimize
+}
+
+func (s *Session) RecordModelCall(inputTokens int, outputTokens int) {
+	s.LastInputTokens = inputTokens
+	s.LastOutputTokens = outputTokens
+	s.EstimatedInputTokens += inputTokens
+	s.EstimatedOutputTokens += outputTokens
+}
+
+func (s *Session) EstimatedAPITokens() int {
+	return s.EstimatedInputTokens + s.EstimatedOutputTokens
 }
 
 func (s *Session) SetEffort(effort string) error {

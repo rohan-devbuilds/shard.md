@@ -20,6 +20,11 @@ func TestSelectFilesForUIPrompt(t *testing.T) {
 	assertFiles(t, got, want)
 }
 
+func TestSelectFilesAlwaysIncludesCurrent(t *testing.T) {
+	got := SelectFiles("hello there", "", "medium")
+	assertFiles(t, got, []string{"current"})
+}
+
 func assertFiles(t *testing.T, got []string, want []string) {
 	t.Helper()
 	if len(got) != len(want) {

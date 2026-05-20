@@ -17,12 +17,12 @@ var optimizeCmd = &cobra.Command{
 	Short: "Compress the current session into .shard memory files",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		store := memory.NewStore(".")
-		if err := store.Init(); err != nil {
+		sess := session.New()
+		prov, err := provider.New(providerName, modelName)
+		if err != nil {
 			return err
 		}
-		sess := session.New()
-		prov := provider.NewAnthropicProvider(modelName)
-		if err := optimizer.Run(context.Background(), sess, store, prov); err != nil {
+		if _, err := optimizer.Run(context.Background(), sess, store, prov); err != nil {
 			return err
 		}
 		fmt.Println("Optimization complete.")
